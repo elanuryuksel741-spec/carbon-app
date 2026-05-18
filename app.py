@@ -1,10 +1,11 @@
+import os
 from flask import Flask, render_template, request
 import joblib
-import os
 import numpy as np
 import sqlite3
 from datetime import datetime
 
+# Flask app nesnesi - gunicorn için 'app' adı şart
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -24,19 +25,10 @@ def init_db():
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS submissions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        electricity_cost REAL,
-        heating_type TEXT,
-        gas_cost REAL,
-        coal_tons REAL,
-        meat_freq TEXT,
-        recycle TEXT,
-        cargo_monthly INTEGER,
-        domestic_flights INTEGER,
-        international_flights INTEGER,
-        transport_mode TEXT,
-        fuel_type TEXT,
-        co2_result REAL,
-        submitted_at TEXT
+        electricity_cost REAL, heating_type TEXT, gas_cost REAL, coal_tons REAL,
+        meat_freq TEXT, recycle TEXT, cargo_monthly INTEGER,
+        domestic_flights INTEGER, international_flights INTEGER,
+        transport_mode TEXT, fuel_type TEXT, co2_result REAL, submitted_at TEXT
     )''')
     conn.commit()
     conn.close()
@@ -122,5 +114,7 @@ def index():
             return render_template('index.html', error=f"⚠️ Hata: {str(e)}")
     return render_template('index.html', error=None)
 
+# Render için: PORT env variable'ını kullan, host 0.0.0.0 şart
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
