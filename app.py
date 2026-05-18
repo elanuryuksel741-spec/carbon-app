@@ -173,36 +173,93 @@ def index():
             return render_template('index.html', error=f"⚠️ Hata: {str(e)}")
     return render_template('index.html', error=None)
 
-# === BASİT ADMIN SAYFASI: Veritabanındaki kayıtları gör ===
+# === BASİT ADMIN SAYFASI: Şifreli + Tüm Alanlar ===
 @app.route('/admin')
 def admin_view():
+    # Basit şifre koruması: ?pass=SENIN_SIFREN
+    if request.args.get('pass') != 'karbon2026':  # Şifreyi buradan değiştir
+        return "🔐 Yetkisiz erişim. Doğru şifreyi girin: /admin?pass=XXXX", 401
+    
     try:
         conn, db_type = get_db_connection()
         cur = conn.cursor()
         
+        # TÜM ALANLARI ÇEK (id hariç sıralama isteğe bağlı)
         if db_type == 'postgres':
-            cur.execute("SELECT id, electricity_cost, heating_type, co2_result, submitted_at FROM submissions ORDER BY id DESC LIMIT 20")
+            query = """
+                SELECT id, electricity_cost, heating_type, gas_cost, coal_tons, 
+                       meat_freq, recycle, cargo_monthly, domestic_flights, 
+                       international_flights, transport_mode, fuel_type, 
+                       co2_result, submitted_at 
+                FROM submissions ORDER BY id DESC LIMIT 50
+            """
         else:
-            cur.execute("SELECT id, electricity_cost, heating_type, co2_result, submitted_at FROM submissions ORDER BY id DESC LIMIT 20")
-        
+            query = """
+                SELECT id, electricity_cost, heating_type, gas_cost, coal_tons, 
+                       meat_freq, recycle, cargo_monthly, domestic_flights, 
+                       international_flights, transport_mode, fuel_type, 
+                       co2_result, submitted_at 
+                FROM submissions ORDER BY id DESC LIMIT 50
+            """
+        cur.execute(query)
         rows = cur.fetchall()
+        columns = [desc[0] for desc in cur.description]  # Sütun isimleri
         cur.close()
         conn.close()
         
-        # Basit HTML tablo oluştur
+        # HTML Tablo Oluştur
         html = f"""
-        <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Admin - Submissions</title>
-        <style>body{{font-family:monospace;padding:20px;background:#f8faf9}}table{{border-collapse:collapse;width:100%;max-width:900px;margin:0 auto}}th,td{{border:1px solid #ddd;padding:8px;text-align:left}}th{{background:#ec4899;color:white}}</style></head><body>
-        <h2>📊 Son 20 Kayıt (DB: {db_type})</h2>
-        <table><thead><tr><th>ID</th><th>Elektrik(TL)</th><th>Isınma</th><th>CO₂(kg)</th><th>Zaman</th></tr></thead><tbody>
+        <!DOCTYPE html><html><head><meta charset="UTF-8"><title>🔐 Admin Panel</title>
+        <style>
+            body{{font-family:'Segoe UI',monospace;padding:20px;background:linear-gradient(135deg,#fdf2f8,#f0f9ff)}}
+            .container{{max-width:1200px;margin:0 auto;background:rgba(255,255,255,0.9);border-radius:16px;padding:20px;box-shadow:0 8px 32px rgba(0,0,0,0.1)}}
+            h2{{color:#ec4899;text-align:center}}
+            table{{border-collapse:collapse;width:100%;font-size:0.85rem}}
+            th,td{{border:1px solid #e2e8f0;padding:10px;text-align:left;vertical-align:top}}
+            th{{background:linear-gradient(135deg,#ec4899,#06b6d4);color:white;position:sticky;top:0}}
+            tr:nth-child(even){{background:#f8faf9}}
+            tr:hover{{background:#fef3c7}}
+            .scroll{{overflow-x:auto;max-height:70vh}}
+            .footer{{text-align:center;margin-top:20px;color:#6b7280}}
+            .badge{{display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.75rem;background:#ec4899;color:white}}
+        </style></head><body>
+        <div class="container">
+        <h2>📊 Tüm Kullanıcı Girdileri (DB: {db_type})</h2>
+        <p style="text-align:center;color:#6b7280">Son 50 kayıt • Şifreli erişim</p>
+        <div class="scroll"><table><thead><tr>
         """
+        for col in columns:
+            html += f"<th>{col}</th>"
+        html += "</tr></thead><tbody>"
+        
         for row in rows:
-            html += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]:.1f}</td><td>{row[4]}</td></tr>"
-        html += "</tbody></table><p style='text-align:center;margin-top:20px'><a href='/'>← Ana Sayfaya Dön</a></p></body></html>"
+            html += "<tr>"
+            for i, val in enumerate(row):
+                if columns[i] == 'submitted_at' and val:
+                    # Tarihi güzelleştir
+                    from datetime import datetime
+                    try:
+                        if isinstance(val, str):
+                            dt = datetime.fromisoformat(val.replace('Z', '+00:00'))
+                        else:
+                            dt = val
+                        html += f"<td>{dt.strftime('%d.%m.%Y %H:%M')}</td>"
+                    except:
+                        html += f"<td>{val}</td>"
+                elif isinstance(val, float):
+                    html += f"<td>{val:.2f}</td>"
+                else:
+                    html += f"<td>{val}</td>"
+            html += "</tr>"
+        html += """
+        </tbody></table></div>
+        <p class="footer"><a href="/">← Ana Sayfa</a> • <a href="/admin?pass=karbon2026">🔄 Yenile</a></p>
+        </div></body></html>
+        """
         return html
     except Exception as e:
         return f"❌ Admin Error: {str(e)}"
-
+    
 # === DEBUG ENDPOINT: DB bağlantısını test et ===
 @app.route('/debug-db')
 def debug_db():
@@ -217,7 +274,7 @@ def debug_db():
     except Exception as e:
         return f"❌ DB Error: {str(e)}"
     
-    
+
 # Render için PORT ayarı
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
