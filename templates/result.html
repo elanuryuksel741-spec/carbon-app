@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ Sonuç - Karbon Yolculuğu</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container result-container">
+        <h1>🌸 Raporun Hazır!</h1>
+        <p class="subtitle">Verdiğin cevaplar ışığında küçük bir yol haritası çizdik 🗺️</p>
+        
+        <div class="result-card main-result">
+            <div class="result-value">{{ "%.0f"|format(co2_kg) }} <span class="unit">kg CO₂/yıl</span></div>
+            <p class="result-subtitle">Tahmini yıllık emisyonun. Her farkındalık, iyileşmenin ilk adımıdır 💫</p>
+        </div>
+
+        <div class="model-badge">
+            <span class="badge-icon">🤖</span>
+            <div class="badge-text">
+                <strong>Model Doğruluğu:</strong> R² = {{ model_r2 }} | Ort. Hata = {{ model_mae }} kg CO₂
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <span class="metric-icon"></span>
+                <div class="metric-value">{{ "%.0f"|format(trees) }}</div>
+                <div class="metric-label">ağaç/yıl emilimi gerekir</div>
+            </div>
+            <div class="metric-card {{ 'high' if vs_avg > 20 else 'low' if vs_avg < -20 else '' }}">
+                <span class="metric-icon">📊</span>
+                <div class="metric-value">{{ "%.1f"|format(vs_avg) }}%</div>
+                <div class="metric-label">ortalama bireyden {{ 'fazla' if vs_avg >= 0 else 'az' }}</div>
+            </div>
+        </div>
+
+        {% if breakdown %}
+        <div class="breakdown-section">
+            <h3>🔍 Emisyon Dağılımın</h3>
+            <div class="breakdown-bars">
+                <div class="breakdown-item"><span>⚡ Elektrik</span><div class="bar"><div class="fill" style="width:{{ breakdown.electricity }}%"></div></div><span class="bar-value">{{ "%.0f"|format(breakdown_kg.electricity) }} kg</span></div>
+                <div class="breakdown-item"><span>🔥 Isınma</span><div class="bar"><div class="fill" style="width:{{ breakdown.heating }}%"></div></div><span class="bar-value">{{ "%.0f"|format(breakdown_kg.heating) }} kg</span></div>
+                <div class="breakdown-item"><span>🚗 Ulaşım</span><div class="bar"><div class="fill" style="width:{{ breakdown.transport }}%"></div></div><span class="bar-value">{{ "%.0f"|format(breakdown_kg.transport) }} kg</span></div>
+                <div class="breakdown-item"><span>✈️ Uçuşlar</span><div class="bar"><div class="fill" style="width:{{ breakdown.flights }}%"></div></div><span class="bar-value">{{ "%.0f"|format(breakdown_kg.flights) }} kg</span></div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="tips-section">
+            <h3>💡 Sana Özel İyileştirme Fikirleri</h3>
+            <ul class="tips-list">{% for tip in tips %}<li>{{ tip }}</li>{% endfor %}</ul>
+        </div>
+
+        <div class="actions">
+            <a href="/" class="btn-secondary">← Yeni Hesaplama Yap</a>
+            <button onclick="window.print()" class="btn-outline">🖨️ Raporu Kaydet</button>
+        </div>
+    </div>
+</body>
+</html>

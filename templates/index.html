@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌸 Karbon Ayak İzi Analizi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 Küçük Adımlar, Büyük Etki</h1>
+        <p class="subtitle">12 soru ile karbon ayak izini keşfet, iyileşme yolculuğuna başla ✨</p>
+        
+        {% if error %}
+        <div class="alert">{{ error }}</div>
+        {% endif %}
+        
+        <form method="POST" id="carbonForm">
+            <fieldset>
+                <legend>⚡ Enerji Alışkanlıkları</legend>
+                <div class="form-group">
+                    <label>Kişi başı aylık elektrik faturası ortalama kaç TL? (elektrik faturası / kişi sayısı)</label>
+                    <input type="number" name="electricity_cost_tl" required placeholder="Örn: 850.0" step="0.5" min="0" onblur="roundToHalf(this)">
+                </div>
+                <div class="form-group">
+                    <label>Isınma tipiniz?</label>
+                    <select name="heating_type" id="heatingType" required onchange="toggleHeating()">
+                        <option value="">Seçiniz...</option>
+                        <option value="gas">Doğalgaz</option>
+                        <option value="coal">Kömür</option>
+                    </select>
+                </div>
+                <div class="form-group conditional" id="gasGroup" style="display:none">
+                    <label>Kişi başı aylık doğalgaz faturası ortalama kaç TL? (doğalgaz faturası / kişi sayısı)</label>
+                    <input type="number" name="gas_cost_tl" placeholder="Örn: 600.0" step="0.5" min="0" onblur="roundToHalf(this)">
+                </div>
+                <div class="form-group conditional" id="coalGroup" style="display:none">
+                    <label>Geçtiğimiz yıl toplam kömür tüketiminiz (ton)?</label>
+                    <input type="number" name="coal_tons" placeholder="Örn: 3.0" step="0.1" min="0">
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>🍃 Beslenme & Yaşam Döngüsü</legend>
+                <div class="form-group">
+                    <label>Ne sıklıkla et tüketiyorsunuz?</label>
+                    <select name="meat_freq" required>
+                        <option value="none">Tüketmiyorum 🌱</option>
+                        <option value="few_times">Haftada birkaç kez</option>
+                        <option value="daily">Her gün</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Atıklarınızı geri dönüştürüyor musunuz?</label>
+                    <select name="recycle" required>
+                        <option value="yes">Evet, özen gösteriyorum ♻️</option>
+                        <option value="no">Henüz başlamadım</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Ayda kaç kez kargo hizmeti kullanıyorsunuz? (Getir, Banabi vb. dahil)</label>
+                    <input type="number" name="cargo_monthly" required placeholder="Örn: 4" min="0" step="1">
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>✈️ Keşif & Seyahat</legend>
+                <div class="form-group">
+                    <label>Geçtiğimiz yıl kaç adet iç hat uçuş yaptınız? (Gidiş-dönüş = 2 uçuş)</label>
+                    <input type="number" name="domestic_flights" required placeholder="Örn: 2" min="0" step="1">
+                </div>
+                <div class="form-group">
+                    <label>Geçtiğimiz yıl kaç adet dış hat uçuş yaptınız? (Kendi kıtanızda, gidiş-dönüş = 2 uçuş)</label>
+                    <input type="number" name="international_flights" required placeholder="Örn: 1" min="0" step="1">
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>🚲 Günlük Ulaşım</legend>
+                <div class="form-group">
+                    <label>Günlük seyahatlerinizde en çok kullandığınız yöntem?</label>
+                    <select name="transport_mode" id="transportMode" required onchange="toggleFuel()">
+                        <option value="none">Aktif yürüyorum / bisiklet 🚶‍♂️</option>
+                        <option value="public">Toplu taşıma 🚌</option>
+                        <option value="private">Özel araç 🚗</option>
+                    </select>
+                </div>
+                <div class="form-group conditional" id="fuelGroup" style="display:none">
+                    <label>Kişisel aracınızın yakıt türü?</label>
+                    <select name="fuel_type">
+                        <option value="electric">Elektrik ⚡</option>
+                        <option value="hybrid">Hibrit 🔋</option>
+                        <option value="gasoline">Benzin ⛽</option>
+                        <option value="diesel">Dizel (Motorin) 🛢️</option>
+                    </select>
+                </div>
+            </fieldset>
+
+            <button type="submit" class="btn-primary">✨ Yolculuğa Başla & Hesapla</button>
+        </form>
+    </div>
+
+    <script>
+        function toggleHeating() {
+            const val = document.getElementById('heatingType').value;
+            document.getElementById('gasGroup').style.display = (val === 'gas') ? 'block' : 'none';
+            document.getElementById('coalGroup').style.display = (val === 'coal') ? 'block' : 'none';
+        }
+        function toggleFuel() {
+            const val = document.getElementById('transportMode').value;
+            document.getElementById('fuelGroup').style.display = (val === 'private') ? 'block' : 'none';
+        }
+        function roundToHalf(input) {
+            if(input.value === '') return;
+            let val = parseFloat(input.value);
+            if (!isNaN(val)) input.value = (Math.round(val * 2) / 2).toFixed(1);
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleHeating();
+            toggleFuel();
+        });
+    </script>
+</body>
+</html>
