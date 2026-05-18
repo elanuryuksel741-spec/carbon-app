@@ -173,6 +173,51 @@ def index():
             return render_template('index.html', error=f"⚠️ Hata: {str(e)}")
     return render_template('index.html', error=None)
 
+# === BASİT ADMIN SAYFASI: Veritabanındaki kayıtları gör ===
+@app.route('/admin')
+def admin_view():
+    try:
+        conn, db_type = get_db_connection()
+        cur = conn.cursor()
+        
+        if db_type == 'postgres':
+            cur.execute("SELECT id, electricity_cost, heating_type, co2_result, submitted_at FROM submissions ORDER BY id DESC LIMIT 20")
+        else:
+            cur.execute("SELECT id, electricity_cost, heating_type, co2_result, submitted_at FROM submissions ORDER BY id DESC LIMIT 20")
+        
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        # Basit HTML tablo oluştur
+        html = f"""
+        <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Admin - Submissions</title>
+        <style>body{{font-family:monospace;padding:20px;background:#f8faf9}}table{{border-collapse:collapse;width:100%;max-width:900px;margin:0 auto}}th,td{{border:1px solid #ddd;padding:8px;text-align:left}}th{{background:#ec4899;color:white}}</style></head><body>
+        <h2>📊 Son 20 Kayıt (DB: {db_type})</h2>
+        <table><thead><tr><th>ID</th><th>Elektrik(TL)</th><th>Isınma</th><th>CO₂(kg)</th><th>Zaman</th></tr></thead><tbody>
+        """
+        for row in rows:
+            html += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]:.1f}</td><td>{row[4]}</td></tr>"
+        html += "</tbody></table><p style='text-align:center;margin-top:20px'><a href='/'>← Ana Sayfaya Dön</a></p></body></html>"
+        return html
+    except Exception as e:
+        return f"❌ Admin Error: {str(e)}"
+
+# === DEBUG ENDPOINT: DB bağlantısını test et ===
+@app.route('/debug-db')
+def debug_db():
+    try:
+        conn, db_type = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM submissions")
+        count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return f"✅ DB Connected! Type: {db_type} | Records: {count} | Time: {datetime.now().isoformat()}"
+    except Exception as e:
+        return f"❌ DB Error: {str(e)}"
+    
+    
 # Render için PORT ayarı
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
