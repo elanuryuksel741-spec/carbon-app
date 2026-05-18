@@ -5,7 +5,13 @@ import numpy as np
 import sqlite3
 from datetime import datetime
 
-# Flask app nesnesi - gunicorn için 'app' adı şart
+# PostgreSQL için (Render'da kullanılır)
+try:
+    import psycopg2
+    from urllib.parse import urlparse
+except ImportError:
+    psycopg2 = None
+
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -19,22 +25,55 @@ except Exception as e:
     print(f"❌ Model yüklenemedi: {e}")
     model = None
 
-# Veritabanı otomatik oluştur
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS submissions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        electricity_cost REAL, heating_type TEXT, gas_cost REAL, coal_tons REAL,
-        meat_freq TEXT, recycle TEXT, cargo_monthly INTEGER,
-        domestic_flights INTEGER, international_flights INTEGER,
-        transport_mode TEXT, fuel_type TEXT, co2_result REAL, submitted_at TEXT
-    )''')
-    conn.commit()
-    conn.close()
+# === VERİTABANI BAĞLANTI FONKSİYONU ===
+def get_db_connection():
+    # Render'da PostgreSQL, localhost'ta SQLite
+    if os.environ.get('RENDER') and psycopg2 and os.environ.get('DATABASE_URL'):
+        # PostgreSQL bağlantısı (Render)
+        result = urlparse(os.environ['DATABASE_URL'])
+        conn = psycopg2.connect(
+            dbname=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+        # Tabloyu oluştur (ilk çalıştırmada)
+        cur = conn.cursor()
+        cur.execute('''CREATE TABLE IF NOT EXISTS submissions (
+            id SERIAL PRIMARY KEY,
+            electricity_cost REAL,
+            heating_type TEXT,
+            gas_cost REAL,
+            coal_tons REAL,
+            meat_freq TEXT,
+            recycle TEXT,
+            cargo_monthly INTEGER,
+            domestic_flights INTEGER,
+            international_flights INTEGER,
+            transport_mode TEXT,
+            fuel_type TEXT,
+            co2_result REAL,
+            submitted_at TIMESTAMP
+        )''')
+        conn.commit()
+        cur.close()
+        return conn, 'postgres'
+    else:
+        # SQLite bağlantısı (localhost)
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS submissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            electricity_cost REAL, heating_type TEXT, gas_cost REAL, coal_tons REAL,
+            meat_freq TEXT, recycle TEXT, cargo_monthly INTEGER,
+            domestic_flights INTEGER, international_flights INTEGER,
+            transport_mode TEXT, fuel_type TEXT, co2_result REAL, submitted_at TEXT
+        )''')
+        conn.commit()
+        return conn, 'sqlite'
 
-init_db()
-
+# === FORM İŞLEME ===
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -97,24 +136,44 @@ def index():
                 for t in default_tips:
                     if t not in tips: tips.append(t); break
             
-            # DB'ye kaydet
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-            c.execute('''INSERT INTO submissions (electricity_cost, heating_type, gas_cost, coal_tons, meat_freq, recycle, cargo_monthly, domestic_flights, international_flights, transport_mode, fuel_type, co2_result, submitted_at) 
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                      (electricity_cost, heating, gas_cost, coal_tons, meat, recycle, cargo, domestic, international, transport, fuel, co2_kg, datetime.now().isoformat()))
+            # === VERİTABANINA KAYDET (PostgreSQL veya SQLite) ===
+            conn, db_type = get_db_connection()
+            cur = conn.cursor()
+            
+            if db_type == 'postgres':
+                cur.execute('''INSERT INTO submissions 
+                    (electricity_cost, heating_type, gas_cost, coal_tons, meat_freq, recycle, 
+                     cargo_monthly, domestic_flights, international_flights, transport_mode, 
+                     fuel_type, co2_result, submitted_at) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+                    (electricity_cost, heating, gas_cost, coal_tons, meat, recycle, 
+                     cargo, domestic, international, transport, fuel, co2_kg, datetime.now()))
+            else:
+                cur.execute('''INSERT INTO submissions 
+                    (electricity_cost, heating_type, gas_cost, coal_tons, meat_freq, recycle, 
+                     cargo_monthly, domestic_flights, international_flights, transport_mode, 
+                     fuel_type, co2_result, submitted_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (electricity_cost, heating, gas_cost, coal_tons, meat, recycle, 
+                     cargo, domestic, international, transport, fuel, co2_kg, datetime.now().isoformat()))
+            
             conn.commit()
+            cur.close()
             conn.close()
+            
+            # Render Logs için çıktı
+            print(f"✅ SUBMISSION: CO2={co2_kg:.1f}kg | DB={db_type} | Time={datetime.now().isoformat()}")
             
             return render_template('result.html', 
                                  co2_kg=co2_kg, trees=trees, vs_avg=vs_avg, tips=tips[:5],
                                  breakdown=breakdown, breakdown_kg=breakdown_raw,
                                  model_r2=0.9842, model_mae=241.35)
         except Exception as e:
+            print(f"❌ HATA: {str(e)}")
             return render_template('index.html', error=f"⚠️ Hata: {str(e)}")
     return render_template('index.html', error=None)
 
-# Render için: PORT env variable'ını kullan, host 0.0.0.0 şart
+# Render için PORT ayarı
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
