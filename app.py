@@ -27,54 +27,57 @@ except Exception as e:
 
 # === VERİTABANI BAĞLANTI FONKSİYONU ===
 def get_db_connection():
-    print(f"🔍 DEBUG: RENDER={os.environ.get('RENDER')}, DATABASE_URL={'SET' if os.environ.get('DATABASE_URL') else 'MISSING'}")
-    # Render'da PostgreSQL, localhost'ta SQLite
+    # Debug: Ortam değişkenlerini kontrol et
     db_url = os.environ.get('DATABASE_URL', '').strip()
+    print(f"🔍 DEBUG DB CHECK: URL_SET={bool(db_url)}, URL_START={db_url.startswith('postgres://') if db_url else 'N/A'}")
+    
+    # PostgreSQL bağlantısı (Render/Neon)
     if psycopg2 and db_url and db_url.startswith('postgres://'):
-        # PostgreSQL bağlantısı (Render)
-        result = urlparse(os.environ['DATABASE_URL'])
-        conn = psycopg2.connect(
-            dbname=result.path[1:],
-            user=result.username,
-            password=result.password,
-            host=result.hostname,
-            port=result.port
-        )
-        # Tabloyu oluştur (ilk çalıştırmada)
-        cur = conn.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS submissions (
-            id SERIAL PRIMARY KEY,
-            electricity_cost REAL,
-            heating_type TEXT,
-            gas_cost REAL,
-            coal_tons REAL,
-            meat_freq TEXT,
-            recycle TEXT,
-            cargo_monthly INTEGER,
-            domestic_flights INTEGER,
-            international_flights INTEGER,
-            transport_mode TEXT,
-            fuel_type TEXT,
-            co2_result REAL,
-            submitted_at TIMESTAMP
-        )''')
-        conn.commit()
-        cur.close()
-        return conn, 'postgres'
-    else:
-        # SQLite bağlantısı (localhost)
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS submissions (
+        try:
+            result = urlparse(db_url)
+            conn = psycopg2.connect(
+                dbname=result.path[1:],
+                user=result.username,
+                password=result.password,
+                host=result.hostname,
+                port=result.port,
+                sslmode='require'
+            )
+            # Tabloyu oluştur
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS submissions (
+                    id SERIAL PRIMARY KEY,
+                    electricity_cost REAL, heating_type TEXT, gas_cost REAL, coal_tons REAL,
+                    meat_freq TEXT, recycle TEXT, cargo_monthly INTEGER,
+                    domestic_flights INTEGER, international_flights INTEGER,
+                    transport_mode TEXT, fuel_type TEXT, co2_result REAL, submitted_at TIMESTAMP
+                )
+            """)
+            conn.commit()
+            cur.close()
+            print("✅ PostgreSQL connection successful")
+            return conn, 'postgres'
+        except Exception as e:
+            print(f"❌ PostgreSQL Connection ERROR: {str(e)}")
+            # Hata alırsak bile SQLite'a düşelim ki site çökmesin
+            pass
+            
+    # Fallback: SQLite (Localhost)
+    print("⚠️ Falling back to SQLite")
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS submissions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             electricity_cost REAL, heating_type TEXT, gas_cost REAL, coal_tons REAL,
             meat_freq TEXT, recycle TEXT, cargo_monthly INTEGER,
             domestic_flights INTEGER, international_flights INTEGER,
             transport_mode TEXT, fuel_type TEXT, co2_result REAL, submitted_at TEXT
-        )''')
-        conn.commit()
-        return conn, 'sqlite'
-
+        )
+    """)
+    conn.commit()
+    return conn, 'sqlite'
 # === FORM İŞLEME ===
 @app.route('/', methods=['GET', 'POST'])
 def index():
