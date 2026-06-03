@@ -32,7 +32,7 @@ def get_db_connection():
     print(f"🔍 DEBUG DB CHECK: URL_SET={bool(db_url)}, URL_START={db_url.startswith('postgres://') if db_url else 'N/A'}")
     
     # PostgreSQL bağlantısı (Render/Neon)
-    if psycopg2 and db_url and db_url.startswith('postgres://'):
+    if psycopg2 and db_url and (db_url.startswith('postgres://') or db_url.startswith('postgresql://')):
         try:
             result = urlparse(db_url)
             conn = psycopg2.connect(
