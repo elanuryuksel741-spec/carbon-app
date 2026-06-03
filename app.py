@@ -6,12 +6,17 @@ import sqlite3
 from datetime import datetime
 from urllib.parse import urlparse
 
-# PostgreSQL importları
+# PostgreSQL için (Render'da kullanılır)
+psycopg2 = None
 try:
     import psycopg2
-except ImportError:
-    psycopg2 = None
-
+    from psycopg2 import OperationalError
+    from urllib.parse import urlparse
+    print("✅ psycopg2 imported successfully")
+except ImportError as e:
+    print(f"❌ psycopg2 import FAILED: {e}")
+except Exception as e:
+    print(f"❌ psycopg2 unexpected error: {e}")
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
