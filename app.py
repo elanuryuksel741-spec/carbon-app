@@ -4,11 +4,11 @@ import joblib
 import numpy as np
 import sqlite3
 from datetime import datetime
+from urllib.parse import urlparse
 
-# PostgreSQL için (Render'da kullanılır)
+# PostgreSQL importları
 try:
     import psycopg2
-    from urllib.parse import urlparse
 except ImportError:
     psycopg2 = None
 
@@ -25,16 +25,19 @@ except Exception as e:
     print(f"❌ Model yüklenemedi: {e}")
     model = None
 
-# === VERİTABANI BAĞLANTI FONKSİYONU ===
+# === KESİN ÇÖZÜM: DATABASE CONNECTION ===
 def get_db_connection():
-    # Debug: Ortam değişkenlerini kontrol et
     db_url = os.environ.get('DATABASE_URL', '').strip()
-    print(f"🔍 DEBUG DB CHECK: URL_SET={bool(db_url)}, URL_START={db_url.startswith('postgres://') if db_url else 'N/A'}")
     
-    # PostgreSQL bağlantısı (Render/Neon)
-    if db_url.startswith('postgres:/') and not db_url.startswith('postgres://'):
+    # URL Format Düzeltme (Tek slash'ı çift yap)
+    if db_url and db_url.startswith('postgres:/') and not db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres:/', 'postgres://', 1)
-    if psycopg2 and db_url and (db_url.startswith('postgres://') or db_url.startswith('postgresql://')):
+        print(f"🔧 URL normalized: {db_url[:30]}...")
+    
+    print(f"🔍 DB DEBUG: URL_SET={bool(db_url)}, PSYCOPG2={bool(psycopg2)}, STARTS_WITH={db_url.startswith('postgres://') if db_url else 'N/A'}")
+
+    # PostgreSQL Bağlantısı
+    if psycopg2 and db_url and db_url.startswith('postgres://'):
         try:
             result = urlparse(db_url)
             conn = psycopg2.connect(
@@ -58,15 +61,15 @@ def get_db_connection():
             """)
             conn.commit()
             cur.close()
-            print("✅ PostgreSQL connection successful")
+            print("✅ PostgreSQL connection SUCCESSFUL")
             return conn, 'postgres'
         except Exception as e:
-            print(f"❌ PostgreSQL Connection ERROR: {str(e)}")
-            # Hata alırsak bile SQLite'a düşelim ki site çökmesin
-            pass
+            print(f"❌ PostgreSQL Connection FAILED: {str(e)}")
+            # Hata durumunda bile SQLite'a düşme, hatayı göster ki bilelim
+            # İstersen buraya fallback ekleyebilirsin ama şimdilik hatayı görelim
             
-    # Fallback: SQLite (Localhost)
-    print("⚠️ Falling back to SQLite")
+    # Fallback: SQLite (Sadece localhost için)
+    print("⚠️ Falling back to SQLite (Local only)")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("""
@@ -80,7 +83,9 @@ def get_db_connection():
     """)
     conn.commit()
     return conn, 'sqlite'
-# === FORM İŞLEME ===
+
+# === ROUTES ===
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -143,10 +148,9 @@ def index():
                 for t in default_tips:
                     if t not in tips: tips.append(t); break
             
-            # === VERİTABANINA KAYDET (PostgreSQL veya SQLite) ===            
+            # DB Kayıt
             conn, db_type = get_db_connection()
-            print(f"🎯 ACTIVE DB TYPE: {db_type}") 
-            
+            print(f"🎯 ACTIVE DB TYPE: {db_type}")
             cur = conn.cursor()
             
             if db_type == 'postgres':
@@ -170,8 +174,7 @@ def index():
             cur.close()
             conn.close()
             
-            # Render Logs için çıktı
-            print(f"✅ SUBMISSION: CO2={co2_kg:.1f}kg | DB={db_type} | Time={datetime.now().isoformat()}")
+            print(f"✅ SUBMISSION: CO2={co2_kg:.1f}kg | DB={db_type}")
             
             return render_template('result.html', 
                                  co2_kg=co2_kg, trees=trees, vs_avg=vs_avg, tips=tips[:5],
@@ -182,41 +185,76 @@ def index():
             return render_template('index.html', error=f"⚠️ Hata: {str(e)}")
     return render_template('index.html', error=None)
 
-# === BASİT ADMIN SAYFASI: Şifreli + Tüm Alanlar ===
-@app.route('/admin')
-def admin_view():
-    # Basit şifre koruması: ?pass=SENIN_SIFREN
-    if request.args.get('pass') != 'karbon2026':  # Şifreyi buradan değiştir
-        return "🔐 Yetkisiz erişim. Doğru şifreyi girin: /admin?pass=XXXX", 401
-    
+# === DEBUG ROUTES (Basit ve Garantili) ===
+
+@app.route('/debug-db')
+def debug_db():
     try:
         conn, db_type = get_db_connection()
         cur = conn.cursor()
-        
-        # TÜM ALANLARI ÇEK (id hariç sıralama isteğe bağlı)
-        if db_type == 'postgres':
-            query = """
-                SELECT id, electricity_cost, heating_type, gas_cost, coal_tons, 
-                       meat_freq, recycle, cargo_monthly, domestic_flights, 
-                       international_flights, transport_mode, fuel_type, 
-                       co2_result, submitted_at 
-                FROM submissions ORDER BY id DESC LIMIT 50
-            """
-        else:
-            query = """
-                SELECT id, electricity_cost, heating_type, gas_cost, coal_tons, 
-                       meat_freq, recycle, cargo_monthly, domestic_flights, 
-                       international_flights, transport_mode, fuel_type, 
-                       co2_result, submitted_at 
-                FROM submissions ORDER BY id DESC LIMIT 50
-            """
+        cur.execute("SELECT COUNT(*) FROM submissions")
+        count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return f"✅ DB Connected! Type: {db_type} | Records: {count} | Time: {datetime.now().isoformat()}"
+    except Exception as e:
+        return f"❌ DB Error: {str(e)}"
+
+@app.route('/super-debug')
+def super_debug():
+    import sys
+    db_url = os.environ.get('DATABASE_URL', 'NOT_SET')
+    preview = db_url[:40] + '...' if len(db_url) > 40 else db_url
+    return f"""<pre style="background:#111;color:#0f0;padding:15px;font-family:monospace">
+🔍 RENDER ENV DEBUG
+==================
+RENDER: {os.environ.get('RENDER', 'NOT_SET')}
+DATABASE_URL preview: {preview}
+Starts with 'postgres://': {str(db_url.startswith('postgres://'))}
+psycopg2 available: {'✅ YES' if psycopg2 else '❌ NO'}
+Python: {sys.version.split()[0]}
+    </pre>"""
+
+@app.route('/version')
+def version():
+    return "✅ APP VERSION: 2.0 - POSTGRES READY"
+
+@app.route('/test-post', methods=['GET', 'POST'])
+def test_post():
+    if request.method == 'POST':
+        data = {k: request.form.get(k) for k in request.form}
+        print(f"📩 TEST POST RECEIVED: {data}")
+        return f"✅ POST OK! Received: {data}", 200
+    return '''
+    <html><body style="font-family:sans-serif;padding:40px">
+    <h2>🧪 Form Submit Testi</h2>
+    <form method="POST">
+        <input name="test_value" placeholder="Test değeri gir" required style="padding:10px;width:300px">
+        <button type="submit" style="padding:10px 20px;background:#ec4899;color:white;border:none;border-radius:8px;cursor:pointer">Gönder</button>
+    </form>
+    </body></html>
+    ''', 200
+
+@app.route('/admin')
+def admin_view():
+    if request.args.get('pass') != 'karbon2026':
+        return "🔐 Yetkisiz erişim. Doğru şifreyi girin: /admin?pass=XXXX", 401
+    try:
+        conn, db_type = get_db_connection()
+        cur = conn.cursor()
+        query = """
+            SELECT id, electricity_cost, heating_type, gas_cost, coal_tons, 
+                   meat_freq, recycle, cargo_monthly, domestic_flights, 
+                   international_flights, transport_mode, fuel_type, 
+                   co2_result, submitted_at 
+            FROM submissions ORDER BY id DESC LIMIT 50
+        """
         cur.execute(query)
         rows = cur.fetchall()
-        columns = [desc[0] for desc in cur.description]  # Sütun isimleri
+        columns = [desc[0] for desc in cur.description]
         cur.close()
         conn.close()
         
-        # HTML Tablo Oluştur
         html = f"""
         <!DOCTYPE html><html><head><meta charset="UTF-8"><title>🔐 Admin Panel</title>
         <style>
@@ -230,7 +268,6 @@ def admin_view():
             tr:hover{{background:#fef3c7}}
             .scroll{{overflow-x:auto;max-height:70vh}}
             .footer{{text-align:center;margin-top:20px;color:#6b7280}}
-            .badge{{display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.75rem;background:#ec4899;color:white}}
         </style></head><body>
         <div class="container">
         <h2>📊 Tüm Kullanıcı Girdileri (DB: {db_type})</h2>
@@ -245,7 +282,6 @@ def admin_view():
             html += "<tr>"
             for i, val in enumerate(row):
                 if columns[i] == 'submitted_at' and val:
-                    # Tarihi güzelleştir
                     from datetime import datetime
                     try:
                         if isinstance(val, str):
@@ -268,59 +304,6 @@ def admin_view():
         return html
     except Exception as e:
         return f"❌ Admin Error: {str(e)}"
-    
-# === DEBUG ENDPOINT: DB bağlantısını test et ===
-@app.route('/debug-db')
-def debug_db():
-    try:
-        conn, db_type = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM submissions")
-        count = cur.fetchone()[0]
-        cur.close()
-        conn.close()
-        return f"✅ DB Connected! Type: {db_type} | Records: {count} | Time: {datetime.now().isoformat()}"
-    except Exception as e:
-        return f"❌ DB Error: {str(e)}"
-
-# === ENV DEBUG ROUTE: Tüm ortam değişkenlerini göster (güvenli) ===
-@app.route('/env-debug')
-def env_debug():
-    # Sadece ilgili değişkenleri göster, şifreleri maskele
-    env_vars = {}
-    for key, val in os.environ.items():
-        if 'URL' in key or 'KEY' in key or 'SECRET' in key or 'PASSWORD' in key:
-            env_vars[key] = val[:10] + '...' + val[-5:] if len(val) > 20 else '***'
-        else:
-            env_vars[key] = val
-    return f"<pre>{env_vars}</pre>"
-
-# === SUPER DEBUG: Kod versiyonu + DB URL ilk 50 karakterini göster ===
-@app.route('/super-debug')
-def super_debug():
-    import sys, git
-    try:
-        repo = git.Repo(search_parent_directories=True)
-        commit = repo.head.object.hexsha[:7]
-    except:
-        commit = "unknown"
-    
-    db_url = os.environ.get('DATABASE_URL', 'NOT_SET')
-    db_preview = db_url[:50] + '...' if len(db_url) > 50 else db_url
-    
-    return f"""
-    <pre style="font-family:monospace;background:#1e1e1e;color:#0f0;padding:20px">
-    🔍 SUPER DEBUG REPORT
-    ====================
-    Python Version: {sys.version}
-    Git Commit: {commit}
-    RENDER Env: {os.environ.get('RENDER', 'NOT_SET')}
-    DATABASE_URL Preview: {db_preview}
-    URL Starts with 'postgres://': {str(db_url.startswith('postgres://'))}
-    URL Starts with 'postgres:/': {str(db_url.startswith('postgres:/'))}
-    psycopg2 Loaded: {'✅ YES' if psycopg2 else '❌ NO'}
-    </pre>
-    """
 
 # Render için PORT ayarı
 if __name__ == '__main__':
