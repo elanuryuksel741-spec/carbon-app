@@ -295,6 +295,33 @@ def env_debug():
             env_vars[key] = val
     return f"<pre>{env_vars}</pre>"
 
+# === SUPER DEBUG: Kod versiyonu + DB URL ilk 50 karakterini göster ===
+@app.route('/super-debug')
+def super_debug():
+    import sys, git
+    try:
+        repo = git.Repo(search_parent_directories=True)
+        commit = repo.head.object.hexsha[:7]
+    except:
+        commit = "unknown"
+    
+    db_url = os.environ.get('DATABASE_URL', 'NOT_SET')
+    db_preview = db_url[:50] + '...' if len(db_url) > 50 else db_url
+    
+    return f"""
+    <pre style="font-family:monospace;background:#1e1e1e;color:#0f0;padding:20px">
+    🔍 SUPER DEBUG REPORT
+    ====================
+    Python Version: {sys.version}
+    Git Commit: {commit}
+    RENDER Env: {os.environ.get('RENDER', 'NOT_SET')}
+    DATABASE_URL Preview: {db_preview}
+    URL Starts with 'postgres://': {str(db_url.startswith('postgres://'))}
+    URL Starts with 'postgres:/': {str(db_url.startswith('postgres:/'))}
+    psycopg2 Loaded: {'✅ YES' if psycopg2 else '❌ NO'}
+    </pre>
+    """
+
 # Render için PORT ayarı
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
