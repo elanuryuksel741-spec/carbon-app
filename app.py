@@ -27,8 +27,10 @@ except Exception as e:
 
 # === VERİTABANI BAĞLANTI FONKSİYONU ===
 def get_db_connection():
+    print(f"🔍 DEBUG: RENDER={os.environ.get('RENDER')}, DATABASE_URL={'SET' if os.environ.get('DATABASE_URL') else 'MISSING'}")
     # Render'da PostgreSQL, localhost'ta SQLite
-    if os.environ.get('RENDER') and psycopg2 and os.environ.get('DATABASE_URL'):
+    db_url = os.environ.get('DATABASE_URL', '').strip()
+    if psycopg2 and db_url and db_url.startswith('postgres://'):
         # PostgreSQL bağlantısı (Render)
         result = urlparse(os.environ['DATABASE_URL'])
         conn = psycopg2.connect(
