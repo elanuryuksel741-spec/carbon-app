@@ -141,8 +141,10 @@ def index():
                 for t in default_tips:
                     if t not in tips: tips.append(t); break
             
-            # === VERİTABANINA KAYDET (PostgreSQL veya SQLite) ===
+            # === VERİTABANINA KAYDET (PostgreSQL veya SQLite) ===            
             conn, db_type = get_db_connection()
+            print(f"🎯 ACTIVE DB TYPE: {db_type}") 
+            
             cur = conn.cursor()
             
             if db_type == 'postgres':
@@ -278,7 +280,18 @@ def debug_db():
         return f"✅ DB Connected! Type: {db_type} | Records: {count} | Time: {datetime.now().isoformat()}"
     except Exception as e:
         return f"❌ DB Error: {str(e)}"
-    
+
+# === ENV DEBUG ROUTE: Tüm ortam değişkenlerini göster (güvenli) ===
+@app.route('/env-debug')
+def env_debug():
+    # Sadece ilgili değişkenleri göster, şifreleri maskele
+    env_vars = {}
+    for key, val in os.environ.items():
+        if 'URL' in key or 'KEY' in key or 'SECRET' in key or 'PASSWORD' in key:
+            env_vars[key] = val[:10] + '...' + val[-5:] if len(val) > 20 else '***'
+        else:
+            env_vars[key] = val
+    return f"<pre>{env_vars}</pre>"
 
 # Render için PORT ayarı
 if __name__ == '__main__':
